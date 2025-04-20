@@ -1,0 +1,2 @@
+[console_scripts]
+eplace-ms = src.main:main
