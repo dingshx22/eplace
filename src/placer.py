@@ -187,11 +187,11 @@ class ElectrostaticPlacer:
             current_density = self.density_map.get_max_density()
             
             # 每10次迭代更新一次可视化
-            if iteration % 10 == 0:
+            if iteration % 1 == 0:
                 self.visualizer.visualize_placement(self.density_map, show_field=True, \
                                                     output_file=fr"images/placement_{iteration}.png")
-                self.visualizer.visualize_density(self.density_map,output_file=fr"images/density_{iteration}.png")
-                self.visualizer.visualize_potential(self.density_map,output_file=fr"images/potential_{iteration}.png")
+                self.visualizer.visualize_density(self.density_map,output_file=fr"images/density_{iteration}.png",show=False)
+                self.visualizer.visualize_potential(self.density_map,output_file=fr"images/potential_{iteration}.png",show=False)
 
                 logger.info(f"迭代 {iteration}: HPWL={current_hpwl:.2f}, "
                            f"最大密度={current_density:.2f}, "

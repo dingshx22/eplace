@@ -8,12 +8,12 @@ from typing import List, Dict, Tuple, Optional
 
 logger = logging.getLogger("ePlace.Circuit")
 
-STD_NUM = 100
+STD_NUM = 20
 MACRO_NUM = 0
 # NET_NUM = 0
 
-DIE_WIDTH = 20
-DIE_HEIGHT = 20
+DIE_WIDTH = 10
+DIE_HEIGHT = 10
 
 CELL_LIB = {"STD_CELLS":{
             "NAND2":  {"width": 1.0, "height": 1.0,   "pins":   {"A": (0.2, 0.5), "B": (0.5, 0.5), "Y": (0.8, 0.5) }},
