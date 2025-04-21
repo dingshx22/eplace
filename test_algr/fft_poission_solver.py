@@ -5,7 +5,7 @@ import time
 # FFT 方法
 def solve_poisson_fft(rho, region):
     """
-    使用 FFT 求解二维泊松方程：nabla^2 psi = -rho
+    使用 FFT 求解二维泊松方程:nabla^2 psi = -rho
     rho: 密度矩阵 (m x m)
     dx: 网格间距
     返回：电势 psi
@@ -104,7 +104,7 @@ def compare_methods(m=1024, L=10240.0):
     diff_psi = np.max(np.abs(psi_fft - psi_fdm))
     
     # 输出结果
-    print(f"\n比较结果（网格 {m}x{m}, 区域 {L}x{L}, dx = {dx}):")
+    print(f"\n比较结（网格 {m}x{m}, 区域 {L}x{L}, dx = {dx}):")
     print(f"FFT 方法:")
     print(f"  时间: {fft_time:.4f} 秒")
     print(f"  残差: {fft_residual:.2e}")

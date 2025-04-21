@@ -14,15 +14,14 @@ logger = logging.getLogger("ePlace.Placer")
 
 
 class ElectrostaticPlacer:
-    def __init__(self, circuit: Circuit, \
-                 alpha: float = 1.0, beta: float = 0.5, gamma: float = 0.5, max_iterations: int = 100):
+    def __init__(self, circuit: Circuit, alpha: float = 1.0, beta: float = 0.3, gamma: float = 0.7, max_iterations: int = 100):
         self.circuit = circuit
         self.alpha = alpha        # 静电力学模型参数
         self.beta = beta          # 线长权重
         self.gamma = gamma        # 密度权重
         self.max_iterations = max_iterations
         self.density_map = DensityMap(self.circuit.die_area[0], self.circuit.die_area[1], \
-                                    self.circuit.die_area[2], self.circuit.die_area[3],grid_size=32)      
+                                    self.circuit.die_area[2], self.circuit.die_area[3],grid_size=20)      
         self.learning_rate = 1.0  
         self.visualizer = PlacementVisualizer(self.circuit)  
         logger.info(f"初始化布局器: alpha={self.alpha}, beta={self.beta}, gamma={self.gamma},max_iterations={self.max_iterations}")
@@ -101,10 +100,13 @@ class ElectrostaticPlacer:
         return grad_x, grad_y
     
     def calculate_density_gradient(self, cell: Cell) -> Tuple[float, float]:
-        """ 计算密度梯度  """
-        cx, cy = cell.get_center()   
-        grad_x, grad_y = self.density_map.get_density_gradient(cx, cy)     
-        return grad_x, grad_y
+        """计算密度梯度"""
+        cx, cy = cell.get_center()
+        grad_x, grad_y = self.density_map.get_density_gradient(cx, cy)
+        # 根据当前位置的密度值调整力的大小
+        density = self.density_map.get_density_at(cx, cy)
+        scale = max(1.0, density * 2)  # 密度越大，力越大
+        return grad_x * scale, grad_y * scale
     
     def calculate_gradient(self, cell: Cell) -> Tuple[float, float]:
         """计算总梯度"""
@@ -116,6 +118,7 @@ class ElectrostaticPlacer:
         
         return grad_x, grad_y
     
+
     def update_learning_rate(self, iteration: int):
         """更新学习率"""
         # 随着迭代次数增加，逐渐减小学习率

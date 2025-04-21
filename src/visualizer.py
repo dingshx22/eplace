@@ -25,10 +25,9 @@ class PlacementVisualizer:
         self.ax = None
         self.cell_patches = {}
         self.cell_texts = {}
-        self.field_arrows = []
         
         # 创建图形
-        self.fig, self.ax = plt.subplots(figsize=(14, 12))
+        self.fig, self.ax = plt.subplots(figsize=(12, 10))
         plt.ion()  # 打开交互模式
         logger.info("可视化器初始化完成")
 
@@ -108,10 +107,9 @@ class PlacementVisualizer:
                 
     def draw_field(self, density_map: DensityMap):
         """绘制电场方向"""
-        # 清除之前的箭头
-        for arrow in self.field_arrows:
-            arrow.remove()
-        self.field_arrows.clear()
+        # 清除之前的所有箭头
+        self.ax.clear()  # 清除整个图形
+        self.draw_cells()  # 重新绘制单元
         
         # 计算箭头的缩放因子
         scale = min(density_map.grid_width, density_map.grid_height) * 0.5
@@ -126,17 +124,10 @@ class PlacementVisualizer:
                 # 获取该点的电场
                 fx, fy = density_map.field_x[i, j], density_map.field_y[i, j]
                 # 如果电场强度足够大，才绘制箭头
-
                 field_strength = np.sqrt(fx*fx + fy*fy)
                 if field_strength > 0:  # 设置一个阈值
                     # 归一化并缩放
                     fx = fx / field_strength * scale
-                    fy = fy / field_strength * scale
-
+                    fy = fy / field_strength * scale                 
                     # 绘制箭头
-                    arrow = self.ax.arrow(x, y, fx, fy,
-                                        head_width=scale*0.2,
-                                        head_length=scale*0.3,
-                                        fc='red', ec='red',
-                                        alpha=0.5)
-                    self.field_arrows.append(arrow)
+                    self.ax.arrow(x, y, fx, fy,head_width=scale*0.2,head_length=scale*0.3,fc='red', ec='red',alpha=0.5)

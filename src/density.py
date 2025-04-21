@@ -33,8 +33,6 @@ class DensityMap:
 
         self.field_x = np.zeros((self.nx, self.ny))        # 电场梯度
         self.field_y = np.zeros((self.nx, self.ny))
-        
-        self.sigma = 1.0        # 高斯平滑参数
     
     def clear(self):
         self.density.fill(0.0)
@@ -94,7 +92,7 @@ class DensityMap:
         # self.field_y[:, :-1] = -(self.potential[:, 1:] - self.potential[:, :-1]) / self.grid_height  # y方向梯度
         # Solve Poisson equation using DST with DC removal
 
-        self.potential = solve_poisson_dst(self.density, (self.width, self.height), sigma=self.sigma)
+        self.potential = solve_poisson_dst(self.density, (self.width, self.height), sigma=2)
         
         # Initialize field arrays
         self.field_x = np.zeros_like(self.potential)
