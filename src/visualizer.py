@@ -71,6 +71,7 @@ class PlacementVisualizer:
         y = np.linspace(density_map.origin_y, density_map.origin_y + density_map.height, density_map.ny)
         X, Y = np.meshgrid(x, y)
         
+        
         # 绘制电势图
         # # contour = self.ax.contourf(X, Y, potential.T, levels=20, cmap='viridis')  
         # self.colorbar = plt.colorbar(contour, ax=self.ax, label='电势', pad=0.05)
@@ -91,7 +92,6 @@ class PlacementVisualizer:
     # 添加颜色条
         self.colorbar = plt.colorbar(img, ax=self.ax, label='电势', pad=0.05)        
 
-        
         # 设置坐标轴
         self.ax.set_xlim(density_map.origin_x, density_map.origin_x + density_map.width)
         self.ax.set_ylim(density_map.origin_y, density_map.origin_y + density_map.height)
@@ -157,8 +157,48 @@ class PlacementVisualizer:
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
 
-    def visualize_placement(self, density_map: DensityMap = None, show_field = False, show = True ,output_file= None):
-        """可视化布局结果"""       
+    def draw_movement_arrows(self, gradients: Dict[str, Tuple[float, float]]):
+        """
+        Args:
+            gradients: 字典，键为单元名称，值为(grad_x, grad_y)梯度元组
+        """
+        if not gradients:
+            return
+            
+        for cell_name, (grad_x, grad_y) in gradients.items():
+            if cell_name not in self.circuit.cells:
+                continue
+                
+            cell = self.circuit.cells[cell_name]
+            # 获取单元中心点
+            center_x, center_y = cell.get_center()
+            
+            # 计算箭头长度（根据梯度大小标准化）
+            magnitude = np.sqrt(grad_x**2 + grad_y**2)
+            if magnitude < 1e-6:  # 避免除以零
+                continue
+                
+            # 标准化箭头长度
+            arrow_length = min(20, magnitude * 0.1)  # 限制最大长度
+            dx = -grad_x * arrow_length / magnitude  # 注意这里是负的梯度方向
+            dy = -grad_y * arrow_length / magnitude
+            
+
+
+            # 绘制箭头
+            arrow = Arrow(center_x, center_y, dx, dy,
+                        width=0.5, color='black', alpha=0.8)
+            self.ax.add_patch(arrow)
+
+    def visualize_placement(self, density_map: DensityMap = None, show_field = False, show = True, output_file = None, gradients: Dict[str, Tuple[float, float]] = None):
+        """可视化布局结果
+        Args:
+            density_map: 密度图对象
+            show_field: 是否显示电场
+            show: 是否显示图形
+            output_file: 输出文件路径
+            gradients: 单元移动方向的梯度字典
+        """       
         # 清除之前的内容
         self.ax.clear()
         self.cell_patches.clear()
@@ -184,6 +224,10 @@ class PlacementVisualizer:
         # 如果提供了密度图，显示电场
         if density_map is not None and show_field:
             self.draw_field(density_map)
+            
+        # 如果提供了梯度信息，绘制移动方向
+        if gradients is not None:
+            self.draw_movement_arrows(gradients)
         
         # 设置坐标轴
         self.ax.set_xlim(min_x - 1, max_x + 1)

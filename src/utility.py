@@ -4,7 +4,6 @@ import time
 from scipy.ndimage import gaussian_filter
 from scipy.fft import dst, idst
 
-
 # FFT 方法
 def solve_poisson_fft(rho, region):
     """
@@ -38,18 +37,15 @@ def solve_poisson_dst(rho, region, sigma=1.0):
         rho: Density matrix (m x n)
         region: Tuple of (width, height) of the physical region
         sigma: Standard deviation for Gaussian smoothing
-    
-    Returns:
-        psi: Potential matrix (m x n)
     """
-    # Apply Gaussian smoothing to density
-    rho_smooth = gaussian_filter(rho, sigma=sigma)
+
+    rho_smooth = gaussian_filter(rho, sigma=sigma)    # Apply Gaussian smoothing to density
+    # rho_smooth = rho
 
     # Remove DC component from density (make zero-mean)
     rho_mean = np.mean(rho_smooth)
     rho_smooth = rho_smooth - rho_mean
     # print(f"Removed DC component from density: mean = {rho_mean:.4e}")
-
 
     m, n = rho_smooth.shape
     dx = region[0] / m
@@ -62,19 +58,22 @@ def solve_poisson_dst(rho, region, sigma=1.0):
     ky = (np.pi / (n * dy)) * j
     kx, ky = np.meshgrid(kx, ky)
     
-
     denom = kx**2 + ky**2    # Compute denominator (k^2 = kx^2 + ky^2)
 
     epsilon = 1e-10    # Avoid division by zero with small epsilon
     denom = np.where(denom == 0, epsilon, denom)
-    rho_dst = dst(dst(rho_smooth, type=2, axis=0), type=2, axis=1)    # Apply DST to rho
-    psi_dst = -rho_dst / denom    # Solve in frequency domain: ψ̂ = -ρ̂ / (kx^2 + ky^2)
+
+    # Use norm="ortho" for correct scaling
+    rho_dst = dst(dst(rho_smooth, type=2, axis=0,norm='ortho'), type=2, axis=1,norm='ortho') 
+    psi_dst = rho_dst / denom    # Solve in frequency domain: ψ̂ = -ρ̂ / (kx^2 + ky^2)  ，
+                                 # 但是在代码中不加负号反而正确不知道为什么
     
     # Inverse DST to get potential
-    psi = idst(idst(psi_dst, type=2, axis=1), type=2, axis=0)
+    psi = idst(idst(psi_dst, type=2, axis=1,norm='ortho'), type=2, axis=0,norm='ortho')
     
     # Normalize to account for DST scaling
-    psi /= (2 * (m + 1)) * (2 * (n + 1))
+    # psi /= (2 * (m + 1)) * (2 * (n + 1))
+    # psi /= (4 * m * n)  # 尝试不同的归一化因子  
 
     # Remove DC component from potential (ensure zero-mean)
     psi_mean = np.mean(psi)
@@ -87,3 +86,40 @@ def solve_poisson_dst(rho, region, sigma=1.0):
         psi = np.zeros_like(rho)
     
     return psi
+
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+    m, n = 64, 64
+    rho = np.zeros((m, n))
+    rho[m//2, n//2] = 1.0
+
+    psi = solve_poisson_dst(rho, region=(1.0, 1.0))
+    psi2=solve_poisson_fft(rho, region=(1.0, 1.0))
+
+    print(psi.sum())
+    print(psi2.sum())
+
+    plt.imshow(psi, cmap='viridis', vmin=None, vmax=None)  # 自动调整色条范围
+    plt.imshow(psi2, cmap='viridis', vmin=None, vmax=None)  # 自动调整色条范围
+    plt.title("Potential of Point Charge")
+
+    plt.colorbar()
+    plt.show()
+
+
+
+
+    # rho = np.zeros((64, 64))
+    # rho[30, 32] = 1.0
+    # rho[34, 32] = -1.0
+    # psi = solve_poisson_dst(rho, region=(1.0, 1.0))
+
+
+
+    # plt.imshow(psi, cmap='viridis', vmin=None, vmax=None)  # 自动调整色条范围
+    # plt.title("Potential of Two Charges")
+    # plt.colorbar()
+    # plt.show()
+
+
+

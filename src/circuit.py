@@ -8,12 +8,12 @@ from typing import List, Dict, Tuple, Optional
 
 logger = logging.getLogger("ePlace.Circuit")
 
-STD_NUM = 20
+STD_NUM = 5
 MACRO_NUM = 0
 # NET_NUM = 0
 
-DIE_WIDTH = 10
-DIE_HEIGHT = 10
+DIE_WIDTH = 15
+DIE_HEIGHT = 15
 
 CELL_LIB = {"STD_CELLS":{
             "NAND2":  {"width": 1.0, "height": 1.0,   "pins":   {"A": (0.2, 0.5), "B": (0.5, 0.5), "Y": (0.8, 0.5) }},
@@ -73,7 +73,7 @@ class Cell:
                     <= self.x or self.y + self.height <= other.y
                     or other.y + other.height <= self.y)
 
-    def move_to(self, x: float, y: float):  # 移动单元到指定位置
+    def move_to(self,x,y):  # 移动单元到指定位置
         if not self.is_fixed:
             self.x = x
             self.y = y
@@ -90,10 +90,7 @@ class Net:  # 网络类
     def add_pin(self, pin: Pin):  # 添加引脚到网表
         self.pins.append(pin)
 
-    def get_bounding_box(
-        self,
-    ) -> Tuple[float, float, float,
-               float]:  # 得到 bounding box (min_x, min_y, max_x, max_y)
+    def get_bounding_box(self):  # 得到 bounding box (min_x, min_y, max_x, max_y)
         if not self.pins:
             return (0, 0, 0, 0)
 

@@ -11,7 +11,7 @@ from scipy.ndimage import gaussian_filter
 import time
 
 logger = logging.getLogger("ePlace.Placer")
-
+TIMEs=1
 
 class ElectrostaticPlacer:
     def __init__(self, circuit: Circuit, alpha: float = 1.0, beta: float = 0.3, gamma: float = 0.7, max_iterations: int = 100):
@@ -22,13 +22,12 @@ class ElectrostaticPlacer:
         self.max_iterations = max_iterations
         self.density_map = DensityMap(self.circuit.die_area[0], self.circuit.die_area[1], \
                                     self.circuit.die_area[2], self.circuit.die_area[3],grid_size=20)      
-        self.learning_rate = 1.0  
+        self.learning_rate = 0.1  
         self.visualizer = PlacementVisualizer(self.circuit)  
         logger.info(f"初始化布局器: alpha={self.alpha}, beta={self.beta}, gamma={self.gamma},max_iterations={self.max_iterations}")
 
     def initialize(self):        
         min_x, min_y, max_x, max_y = self.circuit.die_area      
-
         for _, cell in self.circuit.cells.items():    # 初始随机布局（对于未固定的单元）
             if not cell.is_fixed:
                 if cell.is_macro:
@@ -39,8 +38,7 @@ class ElectrostaticPlacer:
                     min_x_loc = min_x + edge_margin
                     min_y_loc = min_y + edge_margin
                 else:
-                    # 标准单元随机分布
-                    min_x_loc = min_x
+                    min_x_loc = min_x# 标准单元随机分布
                     min_y_loc = min_y
                     
                 cell.x = np.random.uniform(min_x_loc, max_x - cell.width)
@@ -58,7 +56,6 @@ class ElectrostaticPlacer:
         """
         使用对数求和模型 (LSE - Log-Sum-Exp) 计算线长梯度
         """
-
         grad_x, grad_y = 0.0, 0.0
         
         # 获取与该单元相连的所有网络
@@ -102,13 +99,18 @@ class ElectrostaticPlacer:
     def calculate_density_gradient(self, cell: Cell) -> Tuple[float, float]:
         """计算密度梯度"""
         cx, cy = cell.get_center()
-        grad_x, grad_y = self.density_map.get_density_gradient(cx, cy)
-        # 根据当前位置的密度值调整力的大小
-        density = self.density_map.get_density_at(cx, cy)
-        scale = max(1.0, density * 2)  # 密度越大，力越大
-        return grad_x * scale, grad_y * scale
+        field_x, field_y = self.density_map.get_density_gradient(cx, cy)
+        
+        # 单元的电荷等于面积
+        cell_area = cell.get_area()
+        
+        # 根据能量函数 N(v) = (1/2) * Σ qi*ψi(v)，梯度应该是 qi * 梯度(ψi)
+        grad_x = field_x * cell_area
+        grad_y = field_y * cell_area        
     
-    def calculate_gradient(self, cell: Cell) -> Tuple[float, float]:
+        return grad_x , grad_y
+    
+    def calculate_gradient(self, cell):
         """计算总梯度"""
         wl_grad_x, wl_grad_y = self.calculate_wirelength_gradient(cell)
         den_grad_x, den_grad_y = self.calculate_density_gradient(cell)
@@ -118,82 +120,92 @@ class ElectrostaticPlacer:
         
         return grad_x, grad_y
     
-    def update_learning_rate(self, iteration: int):
+    def update_learning_rate(self, iteration):
         """更新学习率"""
         # 随着迭代次数增加，逐渐减小学习率
         self.learning_rate = 1.0 * (1.0 - iteration / self.max_iterations)
         self.learning_rate = max(0.01, self.learning_rate)  # 确保学习率不会太小
         
-    def clip_position(self, cell: Cell, x: float, y: float) -> Tuple[float, float]:
+    def clip_position(self, cell, x, y):
         """将单元位置限制在芯片区域内"""
         min_x, min_y, max_x, max_y = self.circuit.die_area
-        # 确保不超出边界
-        x = max(min_x, min(max_x - cell.width, x))
+  
+        x = max(min_x, min(max_x - cell.width, x))      # 确保不超出边界
         y = max(min_y, min(max_y - cell.height, y))
         return x, y
-    
 
     def place(self):
+
         self.initialize()        # 初始化布局
-        
-        # 显示初始布局
-        self.visualizer.visualize_placement(self.density_map, show_field=True,output_file=r"images/initial_placement.png")
-        time.sleep(0.5)  # 暂停一下让用户看清初始状态
+        self.visualizer.visualize_placement(self.density_map, show_field=True,output_file=r"images/initial_placement.png",show=True)
         
         # 全局布局迭代
         for iteration in range(self.max_iterations):
-            # 更新学习率
-            self.update_learning_rate(iteration)
-            
-            # 对每个未固定的单元计算力并更新位置
-            max_movement = 0.0
-            
+            # self.update_learning_rate(iteration) # 更新学习率
+            cell_gradients = {}  # 存储所有单元的梯度信息         
+            max_movement = 0.0  # 对每个未固定的单元计算力并更新位置     
             # 首先移动标准单元
+
+            print(f"-----------------------iteration: {iteration}-----------------------")
+
             for _, cell in self.circuit.cells.items():
                 if not cell.is_fixed and not cell.is_macro:
-                    grad_x, grad_y = self.calculate_gradient(cell)                    # 计算梯度        
+                    grad_x, grad_y = self.calculate_gradient(cell)
+                    cell_gradients[cell.name] = (grad_x, grad_y)
+
+                    print(f"cell.name: {cell.name}, 当前位置: （{cell.x:.3f},{cell.y:.3f}）")
+                    print(f"cell.name: {cell.name}, grad_x: {grad_x:.3f}, grad_y: {grad_y:.3f}")
+
                     # 更新位置
                     new_x = cell.x - self.learning_rate * grad_x
                     new_y = cell.y - self.learning_rate * grad_y
-                    # 限制在芯片区域内
-                    new_x, new_y = self.clip_position(cell, new_x, new_y)  
+
+                    print(f"cell.name: {cell.name}, 更新后的位置({new_x:.3f},{new_y:.3f})")
+             
+                    new_x, new_y = self.clip_position(cell, new_x, new_y)  # 限制在芯片区域内
+
+                    print(f"cell.name: {cell.name}, 限制区域后的位置({new_x:.3f},{new_y:.3f})")
+                    print("     ")
                     # 计算移动距离
                     movement = np.sqrt((new_x - cell.x)**2 + (new_y - cell.y)**2)
                     max_movement = max(max_movement, movement)                    
                     cell.move_to(new_x, new_y)
             
-            # 然后移动宏单元（通常宏单元移动频率较低）
+            # 移动宏单元（通常宏单元移动频率较低）
             if iteration % 5 == 0:  # 每5次迭代更新一次宏单元
                 for cell_name, cell in self.circuit.cells.items():
                     if not cell.is_fixed and cell.is_macro:
-                        grad_x, grad_y = self.calculate_gradient(cell) #计算梯度
+                        grad_x, grad_y = self.calculate_gradient(cell)
+                        cell_gradients[cell.name] = (grad_x, grad_y)
+                        
                         macro_lr = self.learning_rate * 0.2  # 对宏单元使用较小的学习率      
-                        # 更新位置
-                        new_x = cell.x - macro_lr * grad_x
+                       
+                        new_x = cell.x - macro_lr * grad_x # 更新位置
                         new_y = cell.y - macro_lr * grad_y                        
-                        # 限制在芯片区域内
-                        new_x, new_y = self.clip_position(cell, new_x, new_y)                        
-                        # 计算移动距离
-                        movement = np.sqrt((new_x - cell.x)**2 + (new_y - cell.y)**2)
+                        
+                        new_x, new_y = self.clip_position(cell, new_x, new_y)   # 限制在芯片区域内                     
+                       
+                        movement = np.sqrt((new_x - cell.x)**2 + (new_y - cell.y)**2) # 计算移动距离
                         max_movement = max(max_movement, movement)                      
-                        # 更新位置
-                        cell.move_to(new_x, new_y)
+                       
+                        cell.move_to(new_x, new_y) # 更新位置
             
             # 更新密度图
             self.update_density_map()
             
             # 计算当前总线长和拥塞
+            current_energy=self.density_map.get_total_energy()
             current_hpwl = self.circuit.get_total_hpwl()
             current_density = self.density_map.get_max_density()
             
             # 每10次迭代更新一次可视化
-            if iteration % 1 == 0:
+            if iteration % TIMEs == 0:
                 self.visualizer.visualize_placement(self.density_map, show_field=True, \
-                                                    output_file=fr"images/placement_{iteration}.png")
+                                                    output_file=fr"images/placement_{iteration}.png",gradients=cell_gradients,show=True)
                 self.visualizer.visualize_density(self.density_map,output_file=fr"images/density_{iteration}.png",show=False)
                 self.visualizer.visualize_potential(self.density_map,output_file=fr"images/potential_{iteration}.png",show=False)
 
-                logger.info(f"迭代 {iteration}: HPWL={current_hpwl:.2f}, "
+                logger.info(f"迭代 {iteration}:能量={current_energy:.2f}, HPWL={current_hpwl:.2f}, "
                            f"最大密度={current_density:.2f}, "
                            f"最大移动={max_movement:.2f}")
                 
@@ -207,11 +219,11 @@ class ElectrostaticPlacer:
         self.visualizer.visualize_placement(self.density_map, show_field=True,output_file=r"images/final_placement.png")
         
         # 最终评估
+        final_energy=self.density_map.get_total_energy()
         final_hpwl = self.circuit.get_total_hpwl()
         final_density = self.density_map.get_max_density()
-        logger.info(f"布局完成: 最终HPWL={final_hpwl:.2f}, 最终最大密度={final_density:.2f}")
-    
-    
+        logger.info(f"布局完成: 最终能量={final_energy:.2f}, 最终HPWL={final_hpwl:.2f}, 最终最大密度={final_density:.2f}")
+      
     def legalize(self):
         """
         执行布局合法化(legalization)

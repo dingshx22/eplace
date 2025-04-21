@@ -90,8 +90,8 @@ class DensityMap:
         # self.field_y = np.zeros_like(self.potential)        
         # self.field_x[:-1, :] = -(self.potential[1:, :] - self.potential[:-1, :]) / self.grid_width   # x方向梯度
         # self.field_y[:, :-1] = -(self.potential[:, 1:] - self.potential[:, :-1]) / self.grid_height  # y方向梯度
-        # Solve Poisson equation using DST with DC removal
 
+        # Solve Poisson equation using DST with DC removal
         self.potential = solve_poisson_dst(self.density, (self.width, self.height), sigma=2)
         
         # Initialize field arrays
@@ -99,21 +99,20 @@ class DensityMap:
         self.field_y = np.zeros_like(self.potential)
         
         # Central difference for x-direction gradient (second-order accurate)
-        self.field_y[1:-1, :] = -(self.potential[2:, :] - self.potential[:-2, :]) / (2 * self.grid_height)
+        self.field_x[1:-1, :] = -(self.potential[2:, :] - self.potential[:-2, :]) / (2 * self.grid_height)
         # One-sided difference for boundaries
-        self.field_y[0, :] = -(self.potential[1, :] - self.potential[0, :]) / self.grid_height
-        self.field_y[-1, :] = -(self.potential[-1, :] - self.potential[-2, :]) / self.grid_height
+        self.field_x[0, :] = -(self.potential[1, :] - self.potential[0, :]) / self.grid_height
+        self.field_x[-1, :] = -(self.potential[-1, :] - self.potential[-2, :]) / self.grid_height
         
         # Central difference for y-direction gradient
-        self.field_x[:, 1:-1] = -(self.potential[:, 2:] - self.potential[:, :-2]) / (2 * self.grid_width)
+        self.field_y[:, 1:-1] = -(self.potential[:, 2:] - self.potential[:, :-2]) / (2 * self.grid_width)
         # One-sided difference for boundaries
-        self.field_x[:, 0] = -(self.potential[:, 1] - self.potential[:, 0]) / self.grid_width
-        self.field_x[:, -1] = -(self.potential[:, -1] - self.potential[:, -2]) / self.grid_width
+        self.field_y[:, 0] = -(self.potential[:, 1] - self.potential[:, 0]) / self.grid_width
+        self.field_y[:, -1] = -(self.potential[:, -1] - self.potential[:, -2]) / self.grid_width
 
-    def get_density_at(self, x: float, y: float) -> float:
+    def get_density_at(self, x, y):
         """获取指定位置的密度值"""
-        # 转换到网格坐标
-        grid_x = int((x - self.origin_x) / self.grid_width)
+        grid_x = int((x - self.origin_x) / self.grid_width)        # 转换到网格坐标
         grid_y = int((y - self.origin_y) / self.grid_height)
     
         if grid_x < 0 or grid_x >= self.nx or grid_y < 0 or grid_y >= self.ny:        # 边界检查
@@ -122,6 +121,16 @@ class DensityMap:
         
         return self.density[grid_x, grid_y]
     
+    def get_potential_at(self,x,y):
+        grid_x = int((x - self.origin_x) / self.grid_width)        # 转换到网格坐标
+        grid_y = int((y - self.origin_y) / self.grid_height)
+    
+        if grid_x < 0 or grid_x >= self.nx or grid_y < 0 or grid_y >= self.ny:        # 边界检查
+            print(f"Error: DensityMap: get_po_at: grid_x = {grid_x}, grid_y = {grid_y}, nx = {self.nx}, ny = {self.ny}")
+            return 0.0
+        
+        return (self.field_x[grid_x, grid_y], self.field_y[grid_x, grid_y])        
+
     def get_max_density(self) -> float:
         return np.max(self.density)
     
@@ -129,10 +138,19 @@ class DensityMap:
         return np.mean(self.density)
     
     def get_density_gradient(self, x: float, y: float) -> Tuple[float, float]: 
+
         grid_x = int((x - self.origin_x) / self.grid_width)
         grid_y = int((y - self.origin_y) / self.grid_height)
         
         if grid_x < 0 or grid_x >= self.nx or grid_y < 0 or grid_y >= self.ny:        # 边界检查
             print(f"Error: DensityMap: get_density_gradient: grid_x = {grid_x}, grid_y = {grid_y}, nx = {self.nx}, ny = {self.ny}")
             return (0.0, 0.0)
-        return (self.field_x[grid_x, grid_y], self.field_y[grid_x, grid_y])        # 负梯度方向代表力的方向
+        return (self.field_x[grid_x, grid_y], self.field_y[grid_x, grid_y])        # 负梯度方向代表力的方向   
+
+    def get_total_energy(self):
+        # energy = 0.0
+        # for _, cell in self.circuit.cells.items():
+        # cx, cy = cell.get_center()
+        # potential = self.get_potential_at(cx, cy)
+        # energy += 0.5 * cell.get_area() * potential
+        return 0.5 * np.sum(self.density * self.potential)
