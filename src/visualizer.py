@@ -25,14 +25,95 @@ class PlacementVisualizer:
         self.ax = None
         self.cell_patches = {}
         self.cell_texts = {}
+        self.colorbar = None  # 添加 colorbar 引用
         
         # 创建图形
         self.fig, self.ax = plt.subplots(figsize=(12, 10))
         plt.ion()  # 打开交互模式
         logger.info("可视化器初始化完成")
 
+    def clear_plot(self):
+        """清除当前图形"""        # 完全重置图形
+        plt.close(self.fig)
+        self.fig, self.ax = plt.subplots(figsize=(12, 10))
+        plt.ion()  # 重新打开交互模式
+        
+        # 重置所有属性
+        self.cell_patches.clear()
+        self.cell_texts.clear()
+        self.colorbar = None
 
-    def visualize(self, density_map: DensityMap = None, show_field: bool = False, output_file: str = None):
+    def visualize_potential(self, density_map: DensityMap, output_file: str = None):
+        """可视化电势图"""
+        self.clear_plot()        # 清除之前的内容
+        
+        # 获取电势数据
+        potential = density_map.potential
+        
+        # 创建网格
+        x = np.linspace(density_map.origin_x, density_map.origin_x + density_map.width, density_map.nx)
+        y = np.linspace(density_map.origin_y, density_map.origin_y + density_map.height, density_map.ny)
+        X, Y = np.meshgrid(x, y)
+        
+        # 绘制电势图
+        contour = self.ax.contourf(X, Y, potential.T, levels=20, cmap='viridis')
+        self.colorbar = plt.colorbar(contour, ax=self.ax, label='电势', pad=0.1)
+        
+        # 设置坐标轴
+        self.ax.set_xlim(density_map.origin_x, density_map.origin_x + density_map.width)
+        self.ax.set_ylim(density_map.origin_y, density_map.origin_y + density_map.height)
+        self.ax.set_aspect('equal')
+        self.ax.set_xlabel('X 坐标')
+        self.ax.set_ylabel('Y 坐标')
+        self.ax.set_title('电势分布图')
+        
+        # 调整布局
+        self.fig.tight_layout()
+        
+        # 保存或显示图形
+        if output_file:
+            plt.savefig(output_file, dpi=300, bbox_inches='tight')
+            logger.info(f"电势图保存到: {output_file}")
+        
+        # 更新显示
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+
+    def visualize_density(self, density_map: DensityMap, output_file: str = None):
+        """可视化密度图"""
+        self.clear_plot()
+        density = density_map.density
+        
+        # 创建网格
+        x = np.linspace(density_map.origin_x, density_map.origin_x + density_map.width, density_map.nx)
+        y = np.linspace(density_map.origin_y, density_map.origin_y + density_map.height, density_map.ny)
+        X, Y = np.meshgrid(x, y)
+        
+        # 绘制密度图
+        contour = self.ax.contourf(X, Y, density.T, levels=20, cmap='hot')
+        self.colorbar = plt.colorbar(contour, ax=self.ax, label='密度', pad=0.1)
+        
+        # 设置坐标轴
+        self.ax.set_xlim(density_map.origin_x, density_map.origin_x + density_map.width)
+        self.ax.set_ylim(density_map.origin_y, density_map.origin_y + density_map.height)
+        self.ax.set_aspect('equal')
+        self.ax.set_xlabel('X 坐标')
+        self.ax.set_ylabel('Y 坐标')
+        self.ax.set_title('单元密度分布图')
+        
+        # 调整布局
+        self.fig.tight_layout()
+        
+        # 保存或显示图形
+        if output_file:
+            plt.savefig(output_file, dpi=300, bbox_inches='tight')
+            logger.info(f"密度图保存到: {output_file}")
+        
+        # 更新显示
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+
+    def visualize_placement(self, density_map: DensityMap = None, show_field: bool = False, output_file: str = None):
         """可视化布局结果"""       
         # 清除之前的内容
         self.ax.clear()

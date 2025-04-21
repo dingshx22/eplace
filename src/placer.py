@@ -118,7 +118,6 @@ class ElectrostaticPlacer:
         
         return grad_x, grad_y
     
-
     def update_learning_rate(self, iteration: int):
         """更新学习率"""
         # 随着迭代次数增加，逐渐减小学习率
@@ -138,7 +137,7 @@ class ElectrostaticPlacer:
         self.initialize()        # 初始化布局
         
         # 显示初始布局
-        self.visualizer.visualize(density_map=self.density_map, show_field=True)
+        self.visualizer.visualize_placement(self.density_map, show_field=True,output_file=r"images/initial_placement.png")
         time.sleep(0.5)  # 暂停一下让用户看清初始状态
         
         # 全局布局迭代
@@ -189,10 +188,15 @@ class ElectrostaticPlacer:
             
             # 每10次迭代更新一次可视化
             if iteration % 10 == 0:
-                self.visualizer.visualize(density_map=self.density_map, show_field=True)
+                self.visualizer.visualize_placement(self.density_map, show_field=True, \
+                                                    output_file=fr"images/placement_{iteration}.png")
+                self.visualizer.visualize_density(self.density_map,output_file=fr"images/density_{iteration}.png")
+                self.visualizer.visualize_potential(self.density_map,output_file=fr"images/potential_{iteration}.png")
+
                 logger.info(f"迭代 {iteration}: HPWL={current_hpwl:.2f}, "
                            f"最大密度={current_density:.2f}, "
                            f"最大移动={max_movement:.2f}")
+                
             
             # 收敛检查
             if max_movement < 0.1 and iteration > 20:
@@ -200,7 +204,7 @@ class ElectrostaticPlacer:
                 break
         
         # 显示最终布局
-        self.visualizer.visualize(output_file="final_placement.png", density_map=self.density_map, show_field=True)
+        self.visualizer.visualize_placement(self.density_map, show_field=True,output_file=r"images/final_placement.png")
         
         # 最终评估
         final_hpwl = self.circuit.get_total_hpwl()

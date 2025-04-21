@@ -99,17 +99,16 @@ class DensityMap:
         self.field_y = np.zeros_like(self.potential)
         
         # Central difference for x-direction gradient (second-order accurate)
-        self.field_x[1:-1, :] = -(self.potential[2:, :] - self.potential[:-2, :]) / (2 * self.grid_width)
+        self.field_y[1:-1, :] = -(self.potential[2:, :] - self.potential[:-2, :]) / (2 * self.grid_height)
         # One-sided difference for boundaries
-        self.field_x[0, :] = -(self.potential[1, :] - self.potential[0, :]) / self.grid_width
-        self.field_x[-1, :] = -(self.potential[-1, :] - self.potential[-2, :]) / self.grid_width
+        self.field_y[0, :] = -(self.potential[1, :] - self.potential[0, :]) / self.grid_height
+        self.field_y[-1, :] = -(self.potential[-1, :] - self.potential[-2, :]) / self.grid_height
         
         # Central difference for y-direction gradient
-        self.field_y[:, 1:-1] = -(self.potential[:, 2:] - self.potential[:, :-2]) / (2 * self.grid_height)
+        self.field_x[:, 1:-1] = -(self.potential[:, 2:] - self.potential[:, :-2]) / (2 * self.grid_width)
         # One-sided difference for boundaries
-        self.field_y[:, 0] = -(self.potential[:, 1] - self.potential[:, 0]) / self.grid_height
-        self.field_y[:, -1] = -(self.potential[:, -1] - self.potential[:, -2]) / self.grid_height
-
+        self.field_x[:, 0] = -(self.potential[:, 1] - self.potential[:, 0]) / self.grid_width
+        self.field_x[:, -1] = -(self.potential[:, -1] - self.potential[:, -2]) / self.grid_width
 
     def get_density_at(self, x: float, y: float) -> float:
         """获取指定位置的密度值"""
