@@ -11,20 +11,30 @@ from scipy.ndimage import gaussian_filter
 import time
 
 logger = logging.getLogger("ePlace.Placer")
+
 TIMEs=1
+HPWL_ref=30
+COF_max=1.05
+COF_min=0.95
+
+
 
 class ElectrostaticPlacer:
-    def __init__(self, circuit: Circuit, alpha: float = 1.0, beta: float = 0.3, gamma: float = 0.7, max_iterations: int = 100):
+    def __init__(self, circuit: Circuit, alpha = 1.0, max_iterations = 100, bin_size=5):
         self.circuit = circuit
         self.alpha = alpha        # 静电力学模型参数
-        self.beta = beta          # 线长权重
-        self.gamma = gamma        # 密度权重
-        self.max_iterations = max_iterations
+        self._beta = 1          # 线长权重
+        self._lambda = 0        # 密度权重
+        self.max_iterations = max_iterations 
+        self.bin_size = bin_size
+            
+        # 初始化密度图
         self.density_map = DensityMap(self.circuit.die_area[0], self.circuit.die_area[1], \
-                                    self.circuit.die_area[2], self.circuit.die_area[3],grid_size=20)      
+                                    self.circuit.die_area[2], self.circuit.die_area[3], bin_size=self.bin_size)  
+            
         self.learning_rate = 0.1  
         self.visualizer = PlacementVisualizer(self.circuit)  
-        logger.info(f"初始化布局器: alpha={self.alpha}, beta={self.beta}, gamma={self.gamma},max_iterations={self.max_iterations}")
+        logger.info(f"初始化布局器: alpha={self.alpha}, beta={self._beta}, gamma={self._lambda},max_iterations={self.max_iterations}")
 
     def initialize(self):        
         min_x, min_y, max_x, max_y = self.circuit.die_area      
@@ -51,7 +61,16 @@ class ElectrostaticPlacer:
         self.density_map.clear()
         for _, cell in self.circuit.cells.items():
             self.density_map.add_cell(cell)
-    
+
+    def update_lambda(self,delta_hpwl,grad_wirelength,grad_potential):
+        self._lambda = grad_wirelength/grad_potential
+        p=delta_hpwl/HPWL_ref
+        if p<0:
+            cof=COF_max
+        else:
+            cof=max(COF_min,pow(COF_max,1-p))
+        self._lambda=self._lambda*cof
+
     def calculate_wirelength_gradient(self, cell: Cell) -> Tuple[float, float]:
         """
         使用对数求和模型 (LSE - Log-Sum-Exp) 计算线长梯度
@@ -68,7 +87,6 @@ class ElectrostaticPlacer:
         
         # 对每个相关网络计算梯度
         for net in related_nets:
-            # 如果网络只有一个引脚或者没有引脚，则跳过
             if len(net.pins) <= 1:
                 continue
                 
@@ -99,24 +117,22 @@ class ElectrostaticPlacer:
     def calculate_density_gradient(self, cell: Cell) -> Tuple[float, float]:
         """计算密度梯度"""
         cx, cy = cell.get_center()
-        field_x, field_y = self.density_map.get_density_gradient(cx, cy)
-        
+        field_x, field_y = self.density_map.get_density_gradient(cx, cy)    
         # 单元的电荷等于面积
-        cell_area = cell.get_area()
-        
+        cell_area = cell.get_area()    
         # 根据能量函数 N(v) = (1/2) * Σ qi*ψi(v)，梯度应该是 qi * 梯度(ψi)
         grad_x = field_x * cell_area
-        grad_y = field_y * cell_area        
-    
+        grad_y = field_y * cell_area           
         return grad_x , grad_y
-    
+
     def calculate_gradient(self, cell):
         """计算总梯度"""
         wl_grad_x, wl_grad_y = self.calculate_wirelength_gradient(cell)
         den_grad_x, den_grad_y = self.calculate_density_gradient(cell)
+
         # 总梯度 = beta * 线长梯度 + gamma * 密度梯度
-        grad_x = self.beta * wl_grad_x + self.gamma * den_grad_x
-        grad_y = self.beta * wl_grad_y + self.gamma * den_grad_y
+        grad_x = self._beta * wl_grad_x + self._lambda * den_grad_x
+        grad_y = self._beta * wl_grad_y + self._lambda * den_grad_y
         
         return grad_x, grad_y
     
@@ -129,48 +145,94 @@ class ElectrostaticPlacer:
     def clip_position(self, cell, x, y):
         """将单元位置限制在芯片区域内"""
         min_x, min_y, max_x, max_y = self.circuit.die_area
-  
         x = max(min_x, min(max_x - cell.width, x))      # 确保不超出边界
         y = max(min_y, min(max_y - cell.height, y))
         return x, y
 
     def place(self):
-
         self.initialize()        # 初始化布局
         self.visualizer.visualize_placement(self.density_map, show_field=True,output_file=r"images/initial_placement.png",show=True)
-        
+
+        current_hpwl=0
+
         # 全局布局迭代
         for iteration in range(self.max_iterations):
-            # self.update_learning_rate(iteration) # 更新学习率
-            cell_gradients = {}  # 存储所有单元的梯度信息         
-            max_movement = 0.0  # 对每个未固定的单元计算力并更新位置     
-            # 首先移动标准单元
+            self.update_learning_rate(iteration) # 更新学习率
 
             print(f"-----------------------iteration: {iteration}-----------------------")
 
-            for _, cell in self.circuit.cells.items():
+    
+
+            cell_gradients_hpwl={} # 存储所有单元的线长梯度
+            cell_gradients_density={} # 存储所有单元的密度梯度
+            cell_gradients={} # 存储所有单元的总梯度
+            max_movement = 0.0  # 对每个未固定的单元计算力并更新位置   
+
+            for cell_name,cell in self.circuit.cells.items():
+                grad_x_hpwl, grad_y_hpwl = self.calculate_wirelength_gradient(cell)
+                grad_x_density, grad_y_density = self.calculate_density_gradient(cell)
+                cell_gradients_hpwl[cell_name]=(grad_x_hpwl,grad_y_hpwl)
+                cell_gradients_density[cell_name]=(grad_x_density,grad_y_density)
+
+            total_grad_hpwl=sum((x**2+y**2)**0.5 for x,y in cell_gradients_hpwl.values())
+            total_grad_density=sum((x**2+y**2)**0.5 for x,y in cell_gradients_density.values())
+
+            max_density = self.density_map.get_max_density()  
+            print(f"当前最大密度: {max_density}")
+
+
+            last_hpwl=current_hpwl
+            current_hpwl=self.circuit.get_total_hpwl()
+            print(f"当前线长: {current_hpwl}")
+
+            delta_hpwl=current_hpwl-last_hpwl
+            print(f"当前线长变化: {delta_hpwl}")
+
+            self.update_lambda(delta_hpwl,total_grad_hpwl,total_grad_density)
+            print(f"当前lambda: {self._lambda}")
+
+            current_energy=self.density_map.get_total_energy()
+            print(f"当前能量: {current_energy}")
+            print(f"加权后的能量: {current_energy*self._lambda}")
+
+            print(f"目标函数值为: {current_energy*self._lambda+current_hpwl}")
+
+
+            # print(f" 迭代中 Cell 的 Information ")
+            for cell_name,cell in self.circuit.cells.items():
                 if not cell.is_fixed and not cell.is_macro:
-                    grad_x, grad_y = self.calculate_gradient(cell)
+                    # 分别获取线长和密度梯度的x和y分量
+                    grad_x_hpwl, grad_y_hpwl = cell_gradients_hpwl[cell_name]
+                    grad_x_density, grad_y_density = cell_gradients_density[cell_name]
+                    
+                    # 计算总梯度
+                    grad_x = grad_x_hpwl + self._lambda * grad_x_density
+                    grad_y = grad_y_hpwl + self._lambda * grad_y_density
+                    
+
+                    cell_gradients_density[cell_name]=(grad_x_hpwl,grad_y_hpwl)
                     cell_gradients[cell.name] = (grad_x, grad_y)
 
-                    print(f"cell.name: {cell.name}, 当前位置: （{cell.x:.3f},{cell.y:.3f}）")
-                    print(f"cell.name: {cell.name}, grad_x: {grad_x:.3f}, grad_y: {grad_y:.3f}")
+                    print(f"cell.name: {cell.name}, 当前位置: ({cell.x:.2f},{cell.y:.2f})")
+
+
+                    print(f"cell.name: {cell.name}, grad_x: {grad_x:.2f}, grad_y: {grad_y:.2f}")
 
                     # 更新位置
                     new_x = cell.x - self.learning_rate * grad_x
                     new_y = cell.y - self.learning_rate * grad_y
-
                     print(f"cell.name: {cell.name}, 更新后的位置({new_x:.3f},{new_y:.3f})")
              
                     new_x, new_y = self.clip_position(cell, new_x, new_y)  # 限制在芯片区域内
-
                     print(f"cell.name: {cell.name}, 限制区域后的位置({new_x:.3f},{new_y:.3f})")
-                    print("     ")
+
+                    # print("     ")
                     # 计算移动距离
                     movement = np.sqrt((new_x - cell.x)**2 + (new_y - cell.y)**2)
                     max_movement = max(max_movement, movement)                    
                     cell.move_to(new_x, new_y)
             
+
             # 移动宏单元（通常宏单元移动频率较低）
             if iteration % 5 == 0:  # 每5次迭代更新一次宏单元
                 for cell_name, cell in self.circuit.cells.items():
@@ -192,22 +254,20 @@ class ElectrostaticPlacer:
             
             # 更新密度图
             self.update_density_map()
-            
-            # 计算当前总线长和拥塞
-            current_energy=self.density_map.get_total_energy()
-            current_hpwl = self.circuit.get_total_hpwl()
-            current_density = self.density_map.get_max_density()
-            
-            # 每10次迭代更新一次可视化
+
+
+            # 每Times次迭代更新一次可视化
+            # output_file=fr"images/placement_{iteration}.png"
+            output_file=None
             if iteration % TIMEs == 0:
                 self.visualizer.visualize_placement(self.density_map, show_field=True, \
-                                                    output_file=fr"images/placement_{iteration}.png",gradients=cell_gradients,show=True)
-                self.visualizer.visualize_density(self.density_map,output_file=fr"images/density_{iteration}.png",show=False)
-                self.visualizer.visualize_potential(self.density_map,output_file=fr"images/potential_{iteration}.png",show=False)
+                                                    output_file=output_file,gradients=cell_gradients,show=True)
+                
+                # self.visualizer.visualize_density(self.density_map,output_file=fr"images/density_{iteration}.png",show=False)
+                # self.visualizer.visualize_potential(self.density_map,output_file=fr"images/potential_{iteration}.png",show=False)
 
                 logger.info(f"迭代 {iteration}:能量={current_energy:.2f}, HPWL={current_hpwl:.2f}, "
-                           f"最大密度={current_density:.2f}, "
-                           f"最大移动={max_movement:.2f}")
+                           f"最大密度={max_density:.2f}, "f"最大移动={max_movement:.2f}")
                 
             
             # 收敛检查
@@ -216,7 +276,7 @@ class ElectrostaticPlacer:
                 break
         
         # 显示最终布局
-        self.visualizer.visualize_placement(self.density_map, show_field=True,output_file=r"images/final_placement.png")
+        # self.visualizer.visualize_placement(self.density_map, show_field=True,output_file=r"images/final_placement.png")
         
         # 最终评估
         final_energy=self.density_map.get_total_energy()

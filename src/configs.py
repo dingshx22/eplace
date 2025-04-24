@@ -14,9 +14,7 @@ def parse_arguments():
     
     # 可选参数
     parser.add_argument('--alpha', type=float, default=1.0, help='静电力学模型参数')
-    parser.add_argument('--beta', type=float, default=1, help='线长权重参数')
-    parser.add_argument('--gamma', type=float, default=0.5, help='密度权重参数')
-    parser.add_argument('--iterations', type=int, default=10, help='全局布局迭代次数')
+    parser.add_argument('--iterations', type=int, default=100, help='全局布局迭代次数')
     # parser.add_argument('--visualize', action='store_true', help='是否可视化布局结果')
     parser.add_argument('--visualize', type=bool, default=True, help='是否可视化布局结果')
     

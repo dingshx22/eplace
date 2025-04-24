@@ -8,12 +8,14 @@ from typing import List, Dict, Tuple, Optional
 
 logger = logging.getLogger("ePlace.Circuit")
 
-STD_NUM = 5
+STD_NUM = 80
 MACRO_NUM = 0
 # NET_NUM = 0
 
-DIE_WIDTH = 15
-DIE_HEIGHT = 15
+DIE_WIDTH = 20
+DIE_HEIGHT = 20
+
+
 
 CELL_LIB = {"STD_CELLS":{
             "NAND2":  {"width": 1.0, "height": 1.0,   "pins":   {"A": (0.2, 0.5), "B": (0.5, 0.5), "Y": (0.8, 0.5) }},
@@ -33,6 +35,7 @@ class Pin:  #引脚类
     def __init__(self, name: str, parent_cell: 'Cell', offset_x: float, offset_y: float):
         self.name = name
         self.parent_cell = parent_cell
+        self.parent_net = []
         self.offset_x = offset_x
         self.offset_y = offset_y
 
@@ -43,7 +46,6 @@ class Pin:  #引脚类
             return (self.parent_cell.x + self.offset_x,
                     self.parent_cell.y + self.offset_y)
         return (self.offset_x, self.offset_y)
-
 
 class Cell:
 
@@ -80,7 +82,6 @@ class Cell:
         else:
             logger.warning(f"单元{self.name}是固定单元，不能移动")
 
-
 class Net:  # 网络类
 
     def __init__(self, name: str):
@@ -89,6 +90,7 @@ class Net:  # 网络类
 
     def add_pin(self, pin: Pin):  # 添加引脚到网表
         self.pins.append(pin)
+        pin.parent_net.append(self)  # 将当前网络添加到引脚的 parent_net 列表中
 
     def get_bounding_box(self):  # 得到 bounding box (min_x, min_y, max_x, max_y)
         if not self.pins:
@@ -103,16 +105,14 @@ class Net:  # 网络类
         return (max_x - min_x) + (max_y - min_y)
 
 
+
 class Circuit:
 
     def __init__(self):
         self.cells: Dict[str, Cell] = {}
         self.nets: Dict[str, Net] = {}
-        self.rows: List[Tuple[float, float, float,
-                              float]] = []  # 布局行 (x, y, width, height)
-        self.die_area: Tuple[float, float, float,
-                             float] = (0, 0, 0, 0
-                                       )  # (min_x, min_y, max_x, max_y)
+        self.rows: List[Tuple[float, float, float,float]] = []  # 布局行 (x, y, width, height)
+        self.die_area: Tuple[float, float, float,float] = (0, 0, 0, 0)  # (min_x, min_y, max_x, max_y)
 
     def add_cell(self, cell: Cell):
         self.cells[cell.name] = cell

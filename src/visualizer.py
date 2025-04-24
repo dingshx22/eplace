@@ -52,13 +52,14 @@ class PlacementVisualizer:
         
         # 重置坐标轴设置和位置
         self.ax.set_position([0.05, 0.05, 0.8, 0.9])  # 重新设置主图位置
+
         # self.ax.set_xlabel('X 坐标')
         # self.ax.set_ylabel('Y 坐标')
         
         # 重置图形布局
         self.fig.canvas.draw()
 
-    def visualize_potential(self, density_map: DensityMap = None, output_file = None,show =True):
+    def visualize_potential(self, density_map: DensityMap, output_file = None,show =True):
         """可视化电势图"""
         # 清除之前的内容
         self.clear_plot()
@@ -157,38 +158,6 @@ class PlacementVisualizer:
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
 
-    def draw_movement_arrows(self, gradients: Dict[str, Tuple[float, float]]):
-        """
-        Args:
-            gradients: 字典，键为单元名称，值为(grad_x, grad_y)梯度元组
-        """
-        if not gradients:
-            return
-            
-        for cell_name, (grad_x, grad_y) in gradients.items():
-            if cell_name not in self.circuit.cells:
-                continue
-                
-            cell = self.circuit.cells[cell_name]
-            # 获取单元中心点
-            center_x, center_y = cell.get_center()
-            
-            # 计算箭头长度（根据梯度大小标准化）
-            magnitude = np.sqrt(grad_x**2 + grad_y**2)
-            if magnitude < 1e-6:  # 避免除以零
-                continue
-                
-            # 标准化箭头长度
-            arrow_length = min(20, magnitude * 0.1)  # 限制最大长度
-            dx = -grad_x * arrow_length / magnitude  # 注意这里是负的梯度方向
-            dy = -grad_y * arrow_length / magnitude
-            
-
-
-            # 绘制箭头
-            arrow = Arrow(center_x, center_y, dx, dy,
-                        width=0.5, color='black', alpha=0.8)
-            self.ax.add_patch(arrow)
 
     def visualize_placement(self, density_map: DensityMap = None, show_field = False, show = True, output_file = None, gradients: Dict[str, Tuple[float, float]] = None):
         """可视化布局结果
@@ -261,6 +230,7 @@ class PlacementVisualizer:
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
             
+
     def draw_cells(self):
         """绘制所有单元"""
         min_size = 8
@@ -286,6 +256,7 @@ class PlacementVisualizer:
                                   fontsize=8, alpha=0.7)
                 self.cell_texts[cell_name] = text
                 
+
     def draw_field(self, density_map: DensityMap):
         """绘制电场方向"""
         # 清除之前的所有箭头
@@ -293,14 +264,14 @@ class PlacementVisualizer:
         self.draw_cells()  # 重新绘制单元
         
         # 计算箭头的缩放因子
-        scale = min(density_map.grid_width, density_map.grid_height) * 0.5
+        scale = min(density_map.bin_width, density_map.bin_height) * 0.5
         
         # 在每个网格中心绘制电场方向
         for i in range(density_map.nx):
             for j in range(density_map.ny):
                 # 计算网格中心坐标
-                x = density_map.origin_x + (i + 0.5) * density_map.grid_width
-                y = density_map.origin_y + (j + 0.5) * density_map.grid_height
+                x = density_map.origin_x + (i + 0.5) * density_map.bin_width
+                y = density_map.origin_y + (j + 0.5) * density_map.bin_height
                 
                 # 获取该点的电场
                 fx, fy = density_map.field_x[i, j], density_map.field_y[i, j]
@@ -312,3 +283,33 @@ class PlacementVisualizer:
                     fy = fy / field_strength * scale                 
                     # 绘制箭头
                     self.ax.arrow(x, y, fx, fy,head_width=scale*0.2,head_length=scale*0.3,fc='red', ec='red',alpha=0.5)
+
+    def draw_movement_arrows(self, gradients: Dict[str, Tuple[float, float]]):
+        """
+        Args:
+            gradients: 字典，键为单元名称，值为(grad_x, grad_y)梯度元组
+        """
+        if not gradients:
+            return
+            
+        for cell_name, (grad_x, grad_y) in gradients.items():
+            if cell_name not in self.circuit.cells:
+                continue
+                
+            cell = self.circuit.cells[cell_name]
+            # 获取单元中心点
+            center_x, center_y = cell.get_center()
+            
+            # 计算箭头长度（根据梯度大小标准化）
+            magnitude = np.sqrt(grad_x**2 + grad_y**2)
+            if magnitude < 1e-6:  # 避免除以零
+                continue
+                
+            # 标准化箭头长度
+            arrow_length = min(20, magnitude * 0.1)  # 限制最大长度
+            dx = -grad_x * arrow_length / magnitude  # 注意这里是负的梯度方向
+            dy = -grad_y * arrow_length / magnitude
+            
+            # 绘制箭头
+            arrow = Arrow(center_x, center_y, dx, dy,width=0.5, color='black', alpha=0.8)
+            self.ax.add_patch(arrow)

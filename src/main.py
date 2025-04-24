@@ -5,6 +5,7 @@ from src.placer import ElectrostaticPlacer
 from src.visualizer import PlacementVisualizer
 from src.density import DensityMap
 
+
 def main():   #主函数
     args = configs.parse_arguments()
     logger = configs.setup_logger()
@@ -18,20 +19,16 @@ def main():   #主函数
     circuit.load_from_lef_def(args.lef, args.def_file, test=True)  # 默认使用测试模式
     logger.info(f"读取LEF文件{args.lef}和DEF文件{args.def_file} ，成功加载电路 ")   
 
-
-
     # 创建可视化器
 
     visualizer = PlacementVisualizer(circuit) if args.visualize else None
-
     
     # 创建布局器
     placer = ElectrostaticPlacer(
         circuit=circuit,
         alpha=args.alpha,
-        beta=args.beta,
-        gamma=args.gamma,
-        max_iterations=args.iterations
+        max_iterations=args.iterations,
+        bin_size=4
     )
     
     # 执行布局

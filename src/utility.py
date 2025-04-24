@@ -3,6 +3,7 @@ from numpy.fft import fft2, ifft2
 import time
 from scipy.ndimage import gaussian_filter
 from scipy.fft import dst, idst
+from typing import Tuple
 
 # FFT 方法
 def solve_poisson_fft(rho, region):
@@ -32,20 +33,16 @@ def solve_poisson_dst(rho, region, sigma=1.0):
     """
     Solve 2D Poisson equation (∇²ψ = -ρ) using Discrete Sine Transform (DST)
     with Dirichlet boundary conditions (ψ = 0 at edges).
-    
     Args:
         rho: Density matrix (m x n)
         region: Tuple of (width, height) of the physical region
         sigma: Standard deviation for Gaussian smoothing
     """
-
     rho_smooth = gaussian_filter(rho, sigma=sigma)    # Apply Gaussian smoothing to density
     # rho_smooth = rho
 
-    # Remove DC component from density (make zero-mean)
     rho_mean = np.mean(rho_smooth)
     rho_smooth = rho_smooth - rho_mean
-    # print(f"Removed DC component from density: mean = {rho_mean:.4e}")
 
     m, n = rho_smooth.shape
     dx = region[0] / m
@@ -75,10 +72,8 @@ def solve_poisson_dst(rho, region, sigma=1.0):
     # psi /= (2 * (m + 1)) * (2 * (n + 1))
     # psi /= (4 * m * n)  # 尝试不同的归一化因子  
 
-    # Remove DC component from potential (ensure zero-mean)
     psi_mean = np.mean(psi)
     psi = psi - psi_mean
-    # print(f"Removed DC component from potential: mean = {psi_mean:.4e}")
     
     # Check for numerical issues
     if np.any(np.isnan(psi)) or np.any(np.isinf(psi)):
@@ -87,19 +82,46 @@ def solve_poisson_dst(rho, region, sigma=1.0):
     
     return psi
 
+
+def calculate_field(potential, region) :
+    """
+    计算电场
+    """
+    field_x = np.zeros_like(potential)
+    field_y = np.zeros_like(potential)
+
+    m,n=potential.shape
+    bin_width=region[0] / m
+    bin_height=region[1] / n
+
+    # 计算x方向的电场   中心区域使用中心差分
+    field_x[1:-1, :] = -(potential[2:, :] - potential[:-2, :]) / (2 * bin_height)
+    # 边界使用单侧差分
+    field_x[0, :] = -(potential[1, :] - potential[0, :]) / bin_height
+    field_x[-1, :] = -(potential[-1, :] - potential[-2, :]) / bin_height
+    
+    # 计算y方向的电场  中心区域使用中心差分
+    field_y[:, 1:-1] = -(potential[:, 2:] - potential[:, :-2]) / (2 * bin_width)
+    # 边界使用单侧差分
+    field_y[:, 0] = -(potential[:, 1] - potential[:, 0]) / bin_width
+    field_y[:, -1] = -(potential[:, -1] - potential[:, -2]) / bin_width
+    
+    return field_x, field_y
+
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     m, n = 64, 64
     rho = np.zeros((m, n))
     rho[m//2, n//2] = 1.0
 
-    psi = solve_poisson_dst(rho, region=(1.0, 1.0))
+    # psi = solve_poisson_dst(rho, region=(1.0, 1.0))
     psi2=solve_poisson_fft(rho, region=(1.0, 1.0))
 
-    print(psi.sum())
+    # print(psi.sum())
     print(psi2.sum())
 
-    plt.imshow(psi, cmap='viridis', vmin=None, vmax=None)  # 自动调整色条范围
+    # plt.imshow(psi, cmap='viridis', vmin=None, vmax=None)  # 自动调整色条范围
     plt.imshow(psi2, cmap='viridis', vmin=None, vmax=None)  # 自动调整色条范围
     plt.title("Potential of Point Charge")
 
