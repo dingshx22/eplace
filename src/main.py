@@ -43,6 +43,7 @@ def main():   #主函数
     end_time = time.time()
     logger.info(f"布局完成，耗时: {end_time - start_time:.2f}秒")
     circuit.print_area_stats()
+    print("ok")
 
 
 

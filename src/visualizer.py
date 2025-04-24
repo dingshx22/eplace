@@ -159,14 +159,19 @@ class PlacementVisualizer:
             self.fig.canvas.flush_events()
 
 
-    def visualize_placement(self, density_map: DensityMap = None, show_field = False, show = True, output_file = None, gradients: Dict[str, Tuple[float, float]] = None):
+    def visualize_placement(self, density_map: DensityMap = None, show_field = False, show = True, output_file = None, 
+                         gradients: Dict[str, Tuple[float, float]] = None,
+                         wirelength_gradients: Dict[str, Tuple[float, float]] = None,
+                         weighted_density_gradients: Dict[str, Tuple[float, float]] = None):
         """可视化布局结果
         Args:
             density_map: 密度图对象
             show_field: 是否显示电场
             show: 是否显示图形
             output_file: 输出文件路径
-            gradients: 单元移动方向的梯度字典
+            gradients: 总梯度字典 (grad_x, grad_y)
+            wirelength_gradients: 线长梯度字典 (grad_x, grad_y)
+            weighted_density_gradients: 加权密度梯度字典 (grad_x, grad_y)
         """       
         # 清除之前的内容
         self.ax.clear()
@@ -187,6 +192,7 @@ class PlacementVisualizer:
         # 绘制芯片边界
         min_x, min_y, max_x, max_y = self.circuit.die_area
         self.ax.add_patch(Rectangle((min_x, min_y), max_x - min_x, max_y - min_y, fill=False, edgecolor='black',linewidth=2))
+        
         # 绘制单元
         self.draw_cells()
         
@@ -194,18 +200,16 @@ class PlacementVisualizer:
         if density_map is not None and show_field:
             self.draw_field(density_map)
             
-        # 如果提供了梯度信息，绘制移动方向
-        if gradients is not None:
-            self.draw_movement_arrows(gradients)
+        # 绘制不同类型的梯度
+        if gradients is not None or wirelength_gradients is not None or weighted_density_gradients is not None:
+            self.draw_movement_arrows(gradients, wirelength_gradients, weighted_density_gradients)
         
         # 设置坐标轴
         self.ax.set_xlim(min_x - 1, max_x + 1)
         self.ax.set_ylim(min_y - 1, max_y + 1)
         self.ax.set_aspect('equal')
-        # self.ax.set_xlabel('X 坐标')
-        # self.ax.set_ylabel('Y 坐标')
         
-        # 根据文件名设置不同的标题
+        # 设置标题
         title = '电路布局结果'
         self.ax.set_title(title)
         
@@ -218,18 +222,23 @@ class PlacementVisualizer:
         ]
         if show_field:
             legend_elements.append(Arrow(0, 0, 1, 1, color='red', label='电场方向'))
+        if gradients is not None:
+            legend_elements.append(Arrow(0, 0, 1, 1, color='black', label='总梯度'))
+        if wirelength_gradients is not None:
+            legend_elements.append(Arrow(0, 0, 1, 1, color='blue', label='线长梯度'))
+        if weighted_density_gradients is not None:
+            legend_elements.append(Arrow(0, 0, 1, 1, color='red', label='加权密度梯度'))
+            
         self.ax.legend(handles=legend_elements, loc='upper left')
         
         # 保存或显示图形
         if output_file:
             plt.savefig(output_file, dpi=300, bbox_inches='tight')
-            # logger.info(f"布局图保存到: {output_file}")
         
         # 更新显示
         if show:
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
-            
 
     def draw_cells(self):
         """绘制所有单元"""
@@ -284,32 +293,47 @@ class PlacementVisualizer:
                     # 绘制箭头
                     self.ax.arrow(x, y, fx, fy,head_width=scale*0.2,head_length=scale*0.3,fc='red', ec='red',alpha=0.5)
 
-    def draw_movement_arrows(self, gradients: Dict[str, Tuple[float, float]]):
-        """
+    def draw_movement_arrows(self, gradients: Dict[str, Tuple[float, float]] = None,
+                           wirelength_gradients: Dict[str, Tuple[float, float]] = None,
+                           weighted_density_gradients: Dict[str, Tuple[float, float]] = None):
+        """绘制移动方向箭头
         Args:
-            gradients: 字典，键为单元名称，值为(grad_x, grad_y)梯度元组
+            gradients: 总梯度字典
+            wirelength_gradients: 线长梯度字典
+            weighted_density_gradients: 加权密度梯度字典
         """
-        if not gradients:
-            return
-            
-        for cell_name, (grad_x, grad_y) in gradients.items():
+        def draw_arrow(cell_name, grad_x, grad_y, color, alpha=0.8, scale=1.0):
             if cell_name not in self.circuit.cells:
-                continue
+                return
                 
             cell = self.circuit.cells[cell_name]
-            # 获取单元中心点
             center_x, center_y = cell.get_center()
             
-            # 计算箭头长度（根据梯度大小标准化）
+            # 计算箭头长度
             magnitude = np.sqrt(grad_x**2 + grad_y**2)
             if magnitude < 1e-6:  # 避免除以零
-                continue
+                return
                 
             # 标准化箭头长度
-            arrow_length = min(20, magnitude * 0.1)  # 限制最大长度
-            dx = -grad_x * arrow_length / magnitude  # 注意这里是负的梯度方向
+            arrow_length = min(20, magnitude * 0.1) * scale
+            dx = -grad_x * arrow_length / magnitude
             dy = -grad_y * arrow_length / magnitude
             
             # 绘制箭头
-            arrow = Arrow(center_x, center_y, dx, dy,width=0.5, color='black', alpha=0.8)
+            arrow = Arrow(center_x, center_y, dx, dy, width=0.5*scale, color=color, alpha=alpha)
             self.ax.add_patch(arrow)
+
+        # 绘制总梯度箭头
+        if gradients:
+            for cell_name, (grad_x, grad_y) in gradients.items():
+                draw_arrow(cell_name, grad_x, grad_y, 'black', alpha=0.8, scale=1.0)
+
+        # 绘制线长梯度箭头
+        if wirelength_gradients:
+            for cell_name, (grad_x, grad_y) in wirelength_gradients.items():
+                draw_arrow(cell_name, grad_x, grad_y, 'blue', alpha=0.6, scale=0.8)
+
+        # 绘制加权密度梯度箭头
+        if weighted_density_gradients:
+            for cell_name, (grad_x, grad_y) in weighted_density_gradients.items():
+                draw_arrow(cell_name, grad_x, grad_y, 'red', alpha=0.6, scale=0.8)
