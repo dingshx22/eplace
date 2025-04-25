@@ -172,13 +172,13 @@ class ElectrostaticPlacer:
                 writer = csv.writer(f)
                 # 写入表头
                 writer.writerow([
-                    "单元名称",
-                    "当前位置X", "当前位置Y",
-                    "线长梯度X", "线长梯度Y",
-                    "密度梯度X", "密度梯度Y",
-                    "加权密度梯度X", "加权密度梯度Y",
-                    "总梯度X", "总梯度Y",
-                    "更新后位置X", "更新后位置Y"
+                    "cell_name",
+                    "current_x", "current_x",
+                    "hpwl_grad_X", "hpwl_gradient_Y",
+                    "density_grad_X", "density_grad_Y",
+                    "lambda_density_grad_X", "lambda_density_grad_Y",
+                    "total_grad_X", "total_grad_Y",
+                    "new_X", "new_Y"
                 ])
 
             cell_gradients_hpwl={} # 存储所有单元的线长梯度

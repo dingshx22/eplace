@@ -159,7 +159,7 @@ class PlacementVisualizer:
             self.fig.canvas.flush_events()
 
 
-    def visualize_placement(self, density_map: DensityMap = None, show_field = False, show = True, output_file = None, 
+    def visualize_placement(self,learning_rate=1, density_map: DensityMap = None, show_field = False, show = True, output_file = None, 
                          gradients: Dict[str, Tuple[float, float]] = None,
                          wirelength_gradients: Dict[str, Tuple[float, float]] = None,
                          weighted_density_gradients: Dict[str, Tuple[float, float]] = None):

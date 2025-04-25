@@ -52,14 +52,7 @@ def solve_poisson_dst(rho, region, sigma=1.0):
     return psi
 
 
-def caculate_field_dst(psi, region):
- 
 
-
-
-
-
-import numpy as np
 from scipy.fftpack import dst, idst
 import matplotlib.pyplot as plt
 
