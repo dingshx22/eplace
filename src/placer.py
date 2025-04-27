@@ -239,114 +239,104 @@ class ElectrostaticPlacer:
 
     def place(self):
         self.initialize()  # 初始化布局
-        self.visualizer.visualize_placement(self.density_map,show_field=True,output_file=r"images/initial_placement.png",show=True)
+        self.visualizer.visualize_placement(self.density_map, show_field=True, output_file=r"images/initial_placement.png", show=True)
 
         os.makedirs("logs", exist_ok=True)  # 创建logs目录（如果不存在）
+
         L = 10
         mu = 0.9
+        
+        # 为每个cell创建优化状态
+        cell_states = {}
+        for cell in self.circuit.cells.values():
+            if not cell.is_fixed:
+                cell_states[cell.name] = {
+                    'x_now': np.array([cell.x, cell.y]),
+                    'x_prev': np.array([cell.x, cell.y]),
+                    'grad_now': np.zeros(2),
+                    'grad_prev': np.zeros(2),
+                    'v': np.zeros(2)
+                }
 
-        x_now = self.x0.copy()
-        x_prev = x_now.copy()
-
-        # 初始化梯度
-        grad_now = self.gradient_function(x_now)
-        grad_prev = np.zeros_like(grad_now)  # 初始化为0向量而不是复制
-
-        # 初始化线长
-        hpwl_now = self.circuit.get_total_hpwl()
-        hpwl_prev = 0  # 初始化为0而不是复制
-
-        v = np.zeros_like(x_now)
-        history = []
-
-        for it, _ in enumerate(range(self.max_iterations)):
+        for it in range(self.max_iterations):
             print(f"--------------当前迭代次数：{it+1}------------------")
-
-
-            self.visualizer.visualize_placement(
-                self.density_map,
-                show_field=True,
-                output_file=fr"images/placement_{it}.png",
-                show=True)
+            total_movement = 0
             
+            # 对每个cell进行优化
+            for cell in self.circuit.cells.values():
+                if cell.is_fixed:
+                    continue
+                    
+                state = cell_states[cell.name]
+                
+                # 计算当前cell的梯度
+                w_grad_x, w_grad_y = self.calculate_wirelength_gradient(cell)
+                d_grad_x, d_grad_y = self.calculate_density_gradient(cell)
+                state['grad_now'] = np.array([
+                    w_grad_x + self._lambda * d_grad_x,
+                    w_grad_y + self._lambda * d_grad_y
+                ])
+                
+                # 计算动量项
+                y = state['x_now'] + mu * state['v']
+                
+                # 更新Lipschitz常数
+                if it > 0:
+                    denominator = np.linalg.norm(state['x_now'] - state['x_prev'])
+                    if denominator < 1e-10:
+                        L = max(L, 1.0)
+                    else:
+                        L = np.linalg.norm(state['grad_now'] - state['grad_prev']) / denominator
+                    L = max(L, 1)
+                
+                # 更新速度和位置
+                state['v'] = mu * state['v'] - (1 / L) * state['grad_now']
+                state['x_prev'] = state['x_now'].copy()
+                state['grad_prev'] = state['grad_now'].copy()
+                state['x_now'] = state['x_prev'] + state['v']
+                
+                # 更新cell位置
+                cell.x, cell.y = self.clip_position(cell, state['x_now'][0], state['x_now'][1])
+                
+                # 累计移动距离
+                total_movement += np.linalg.norm(state['x_now'] - state['x_prev'])
             
-            self.update_lambda(delta_hpwl = hpwl_now - hpwl_prev)
-
-
-            # 计算动量项
-            y = x_now + mu * v
-            _grad = self.gradient_function(y)
-
-            # 更新Lipschitz常数
-            if it > 0:
-                denominator = np.linalg.norm(x_now - x_prev)
-                print(f"坐标的变化为={denominator}")
-                print(f"梯度的变化为={np.linalg.norm(grad_now - grad_prev)}")
-
-                if denominator < 1e-10:
-                    L = max(L, 1.0)  # 使用一个合理的下界
-                else:
-                    L = np.linalg.norm(grad_now - grad_prev) / denominator
-                L = max(L, 1)  # 确保L不会太小
-
-            print(f"Lipschitz常数={L}")
-
-            # 更新动量和位置
-            v = mu * v - (1 / L) * _grad
-            x_prev = x_now.copy()
-            grad_prev = grad_now.copy()
-            x_now = x_now + v  # 使用x_prev来更新x_now
-            grad_now = self.gradient_function(x_now)
-
-            print("x_now变化量:", np.linalg.norm(x_now - x_prev))
-
-            # 更新位置和密度图
-            self.update_loaction(x_now)
+            # 更新密度图
             self.update_density_map()
-
-            hpwl_prev = hpwl_now            
-            hpwl_now = self.circuit.get_total_hpwl()
-
-
-            # 打印当前状态
+            
+            # 计算和打印当前状态
+            print(f"当前总移动距离={total_movement}")
             print(f"当前能量={self._lambda*self.density_map.get_total_energy()}")
             print(f"当前线长={self.circuit.get_total_hpwl()}")
-            print(f"当前梯度范数={np.linalg.norm(_grad)}")  # 添加梯度范数的打印
-
-            history.append(self.objective_function(x_now))
-
-            if np.linalg.norm(x_now - x_prev) < 1e-6:
+            
+            # 可视化当前布局
+            if it % 10 == 0:
+                self.visualizer.visualize_placement(
+                    self.density_map,
+                    show_field=True,
+                    output_file=fr"images/placement_{it}.png",
+                    show=True
+                )
+            
+            # 收敛检查
+            if total_movement < 1e-6:
                 break
-
+            
             print("------------------------------------")
 
-        # L = estimate_lipschitz_constant(self.gradient_function, self.x0)        # 估计Lipschitz常数
-        # optimizer = NesterovOptimizer(f=self.objective_function,grad_f=self.gradient_function,L=L,x0=self.x0)
-        # x_opt, history = optimizer.optimize()
-
-        # # 更新最终位置
-        # for i, cell in enumerate(self.circuit.cells.values()):
-        #     if not cell.is_fixed:
-        #         cell.x = x_opt[2*i]
-        #         cell.y = x_opt[2*i+1]
-
-        # 更新密度图
-        self.update_density_map()
-
-        # 显示最终布局
+        # 最终布局可视化
         self.visualizer.visualize_placement(
             self.density_map,
             show_field=True,
             output_file=r"images/final_placement.png",
-            show=True)
+            show=True
+        )
 
         # 最终评估
         final_energy = self.density_map.get_total_energy()
         final_hpwl = self.circuit.get_total_hpwl()
         final_density = self.density_map.get_max_density()
-        logger.info(
-            f"布局完成: 最终能量={final_energy:.2f}, 最终HPWL={final_hpwl:.2f}, 最终最大密度={final_density:.2f}"
-        )
+        logger.info(f"布局完成: 最终能量={final_energy:.2f}, 最终HPWL={final_hpwl:.2f}, 最终最大密度={final_density:.2f}")
 
     def legalize(self):
         """
