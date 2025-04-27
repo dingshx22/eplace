@@ -30,6 +30,7 @@ class PlacementVisualizer:
         # 创建图形，调整大小和布局
         self.fig = plt.figure(figsize=(10, 8))
         self.ax = self.fig.add_axes([0.05, 0.05, 0.8, 0.9]) #colorbar预留空间
+        
         plt.ion()  # 打开交互模式
 
         logger.info("可视化器初始化完成")

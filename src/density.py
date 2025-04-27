@@ -84,14 +84,10 @@ class DensityMap:
         self.update_field()
     
     def update_field(self):
-        """更新静电场"""
-
         self.potential = solve_poisson_dst(self.density, (self.width, self.height), sigma=2)
-        
         self.field_x, self.field_y = calculate_field(self.potential, (self.width, self.height))
 
     def get_density_at(self, x, y):
-        """获取指定位置的密度值"""
         bin_x = int((x - self.origin_x) / self.bin_width)        # 转换到网格坐标
         bin_y = int((y - self.origin_y) / self.bin_height)
     
@@ -118,7 +114,6 @@ class DensityMap:
         return np.mean(self.density)
     
     def get_density_gradient(self, x: float, y: float) -> Tuple[float, float]: 
-
         bin_x = int((x - self.origin_x) / self.bin_width)
         bin_y = int((y - self.origin_y) / self.bin_height)
         
